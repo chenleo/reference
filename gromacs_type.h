@@ -2527,6 +2527,101 @@ void gmx_iterate_init(gmx_iterate_t *iterate, gmx_bool bIterate);
 
 gmx_bool done_iterating(const t_commrec *cr, FILE *fplog, int nsteps, gmx_iterate_t *iterate, gmx_bool bFirstIterate, real fom, real *newf);
 
+!!matrix.h
+
+#include "simple.h"
+
+typedef struct {
+    real r, g, b;
+} t_rgb;
+
+typedef struct {
+    char c1; /* should all be non-zero (and printable and not '"') */
+    char c2; /*
+              * should all be zero (single char color names: smaller xpm's)
+              * or should all be non-zero (double char color names: more colors)
+              */
+} t_xpmelmt;
+
+typedef short t_matelmt;
+
+typedef struct {
+    t_xpmelmt   code; /* see comment for t_xpmelmt */
+    const char *desc;
+    t_rgb       rgb;
+} t_mapping;
+
+#define MAT_SPATIAL_X (1<<0)
+#define MAT_SPATIAL_Y (1<<1)
+/* Defines if x and y are spatial dimensions,
+ * when not, there are n axis ticks at the middle of the elements,
+ * when set, there are n+1 axis ticks at the edges of the elements.
+ */
+
+typedef struct {
+    unsigned int flags; /* The possible flags are defined above */
+    int          nx, ny;
+    int          y0;
+    char         title[256];
+    char         legend[256];
+    char         label_x[256];
+    char         label_y[256];
+    gmx_bool     bDiscrete;
+    real        *axis_x;
+    real        *axis_y;
+    t_matelmt  **matrix;
+    int          nmap;
+    t_mapping   *map;
+} t_matrix;
+/* title      matrix title
+ * legend     label for the continuous legend
+ * label_x    label for the x-axis
+ * label_y    label for the y-axis
+ * nx, ny     size of the matrix
+ * axis_x[]   the x-ticklabels
+ * axis_y[]   the y-ticklables
+ * *matrix[]  element x,y is matrix[x][y]
+ * nmap       number of color levels for the output(?)
+ */
+ 
+ !!mdatom.h
+ #include "simple.h"
+ #define  NO_TF_TABLE 255
+ #define  DEFAULT_TF_TABLE 0
+
+typedef struct {
+    real                   tmassA, tmassB, tmass;
+    int                    nr;
+    int                    nalloc;
+    int                    nenergrp;
+    gmx_bool               bVCMgrps;
+    int                    nPerturbed;
+    int                    nMassPerturbed;
+    int                    nChargePerturbed;
+    gmx_bool               bOrires;
+    real                  *massA, *massB, *massT, *invmass;
+    real                  *chargeA, *chargeB;
+    gmx_bool              *bPerturbed;
+    int                   *typeA, *typeB;
+    unsigned short        *ptype;
+    unsigned short        *cTC, *cENER, *cACC, *cFREEZE, *cVCM;
+    unsigned short        *cU1, *cU2, *cORF;
+    /* for QMMM, atomnumber contains atomic number of the atoms */
+    gmx_bool              *bQM;
+    /* The range of home atoms */
+    int                    start;
+    int                    homenr;
+    /* The lambda value used to create the contents of the struct */
+    real                   lambda;
+    /* The AdResS weighting function */
+    real                  *wf;
+    unsigned short        *tf_table_index; /* The tf table that will be applied, if thermodyn, force enabled*/
+} t_mdatoms;
+
+!!membedt.h
+/* abstract data type for membed variables needed in do_md */
+typedef struct membed *gmx_membed_t;
+
 
 
 
