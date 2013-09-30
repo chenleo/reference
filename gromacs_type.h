@@ -1615,7 +1615,917 @@ typedef struct
                                             has been run with this hw_info */
 } gmx_hw_info_t;
 
+!!idef.h
 
+#include "simple.h"
+
+/* check kernel/toppush.c when you change these numbers */
+#define MAXATOMLIST 6
+#define MAXFORCEPARAM   12
+#define NR_RBDIHS   6
+#define NR_FOURDIHS     4
+
+typedef atom_id t_iatom;
+
+/* this MUST correspond to the
+   t_interaction_function[F_NRE] in gmxlib/ifunc.c */
+enum {
+    F_BONDS,
+    F_G96BONDS,
+    F_MORSE,
+    F_CUBICBONDS,
+    F_CONNBONDS,
+    F_HARMONIC,
+    F_FENEBONDS,
+    F_TABBONDS,
+    F_TABBONDSNC,
+    F_RESTRBONDS,
+    F_ANGLES,
+    F_G96ANGLES,
+    F_LINEAR_ANGLES,
+    F_CROSS_BOND_BONDS,
+    F_CROSS_BOND_ANGLES,
+    F_UREY_BRADLEY,
+    F_QUARTIC_ANGLES,
+    F_TABANGLES,
+    F_PDIHS,
+    F_RBDIHS,
+    F_FOURDIHS,
+    F_IDIHS,
+    F_PIDIHS,
+    F_TABDIHS,
+    F_CMAP,
+    F_GB12,
+    F_GB13,
+    F_GB14,
+    F_GBPOL,
+    F_NPSOLVATION,
+    F_LJ14,
+    F_COUL14,
+    F_LJC14_Q,
+    F_LJC_PAIRS_NB,
+    F_LJ,
+    F_BHAM,
+    F_LJ_LR,
+    F_BHAM_LR,
+    F_DISPCORR,
+    F_COUL_SR,
+    F_COUL_LR,
+    F_RF_EXCL,
+    F_COUL_RECIP,
+    F_DPD,
+    F_POLARIZATION,
+    F_WATER_POL,
+    F_THOLE_POL,
+    F_ANHARM_POL,
+    F_POSRES,
+    F_FBPOSRES,
+    F_DISRES,
+    F_DISRESVIOL,
+    F_ORIRES,
+    F_ORIRESDEV,
+    F_ANGRES,
+    F_ANGRESZ,
+    F_DIHRES,
+    F_DIHRESVIOL,
+    F_CONSTR,
+    F_CONSTRNC,
+    F_SETTLE,
+    F_VSITE2,
+    F_VSITE3,
+    F_VSITE3FD,
+    F_VSITE3FAD,
+    F_VSITE3OUT,
+    F_VSITE4FD,
+    F_VSITE4FDN,
+    F_VSITEN,
+    F_COM_PULL,
+    F_EQM,
+    F_EPOT,
+    F_EKIN,
+    F_ETOT,
+    F_ECONSERVED,
+    F_TEMP,
+    F_VTEMP_NOLONGERUSED,
+    F_PDISPCORR,
+    F_PRES,
+    F_DVDL_CONSTR,
+    F_DVDL,
+    F_DKDL,
+    F_DVDL_COUL,
+    F_DVDL_VDW,
+    F_DVDL_BONDED,
+    F_DVDL_RESTRAINT,
+    F_DVDL_TEMPERATURE, /* not calculated for now, but should just be the energy (NVT) or enthalpy (NPT), or 0 (NVE) */
+    F_NRE               /* This number is for the total number of energies	*/
+};
+
+#define IS_RESTRAINT_TYPE(ifunc) (((ifunc == F_POSRES) || (ifunc == F_DISRES) || (ifunc == F_RESTRBONDS) || (ifunc == F_DISRESVIOL) || (ifunc == F_ORIRES) || (ifunc == F_ORIRESDEV) || (ifunc == F_ANGRES) || (ifunc == F_ANGRESZ) || (ifunc == F_DIHRES)))
+
+/* A macro for checking if ftype is an explicit pair-listed LJ or COULOMB
+ * interaction type:
+ * bonded LJ (usually 1-4), or special listed non-bonded for FEP.
+ */
+#define IS_LISTED_LJ_C(ftype) ((ftype) >= F_LJ14 && (ftype) <= F_LJC_PAIRS_NB)
+
+typedef union
+{
+    /* Some parameters have A and B values for free energy calculations.
+     * The B values are not used for regular simulations of course.
+     * Free Energy for nonbondeds can be computed by changing the atom type.
+     * The harmonic type is used for all harmonic potentials:
+     * bonds, angles and improper dihedrals
+     */
+    struct {
+        real a, b, c;
+    } bham;
+    struct {
+        real rA, krA, rB, krB;
+    } harmonic;
+    struct {
+        real klinA, aA, klinB, aB;
+    } linangle;
+    struct {
+        real lowA, up1A, up2A, kA, lowB, up1B, up2B, kB;
+    } restraint;
+    /* No free energy supported for cubic bonds, FENE, WPOL or cross terms */
+    struct {
+        real b0, kb, kcub;
+    } cubic;
+    struct {
+        real bm, kb;
+    } fene;
+    struct {
+        real r1e, r2e, krr;
+    } cross_bb;
+    struct {
+        real r1e, r2e, r3e, krt;
+    } cross_ba;
+    struct {
+        real thetaA, kthetaA, r13A, kUBA, thetaB, kthetaB, r13B, kUBB;
+    } u_b;
+    struct {
+        real theta, c[5];
+    } qangle;
+    struct {
+        real alpha;
+    } polarize;
+    struct {
+        real alpha, drcut, khyp;
+    } anharm_polarize;
+    struct {
+        real al_x, al_y, al_z, rOH, rHH, rOD;
+    } wpol;
+    struct {
+        real a, alpha1, alpha2, rfac;
+    } thole;
+    struct {
+        real c6, c12;
+    } lj;
+    struct {
+        real c6A, c12A, c6B, c12B;
+    } lj14;
+    struct {
+        real fqq, qi, qj, c6, c12;
+    } ljc14;
+    struct {
+        real qi, qj, c6, c12;
+    } ljcnb;
+    /* Proper dihedrals can not have different multiplicity when
+     * doing free energy calculations, because the potential would not
+     * be periodic anymore.
+     */
+    struct {
+        real phiA, cpA; int mult; real phiB, cpB;
+    } pdihs;
+    struct {
+        real dA, dB;
+    } constr;
+    /* Settle can not be used for Free energy calculations of water bond geometry.
+     * Use shake (or lincs) instead if you have to change the water bonds.
+     */
+    struct {
+        real doh, dhh;
+    } settle;
+    struct {
+        real b0A, cbA, betaA, b0B, cbB, betaB;
+    } morse;
+    struct {
+        real pos0A[DIM], fcA[DIM], pos0B[DIM], fcB[DIM];
+    } posres;
+    struct {
+        real pos0[DIM], r, k; int geom;
+    } fbposres;
+    struct {
+        real rbcA[NR_RBDIHS], rbcB[NR_RBDIHS];
+    } rbdihs;
+    struct {
+        real a, b, c, d, e, f;
+    } vsite;
+    struct {
+        int  n; real a;
+    } vsiten;
+    /* NOTE: npair is only set after reading the tpx file */
+    struct {
+        real low, up1, up2, kfac; int type, label, npair;
+    } disres;
+    struct {
+        real phiA, dphiA, kfacA, phiB, dphiB, kfacB;
+    } dihres;
+    struct {
+        int  ex, power, label; real c, obs, kfac;
+    } orires;
+    struct {
+        int  table; real kA; real kB;
+    } tab;
+    struct {
+        real sar, st, pi, gbr, bmlt;
+    } gb;
+    struct {
+        int cmapA, cmapB;
+    } cmap;
+    struct {
+        real buf[MAXFORCEPARAM];
+    } generic;                                               /* Conversion */
+} t_iparams;
+
+typedef int t_functype;
+
+/*
+ * The nonperturbed/perturbed interactions are now separated (sorted) in the
+ * ilist, such that the first 0..(nr_nonperturbed-1) ones are exactly that, and
+ * the remaining ones from nr_nonperturbed..(nr-1) are perturbed bonded
+ * interactions.
+ */
+typedef struct
+{
+    int      nr;
+    int      nr_nonperturbed;
+    t_iatom *iatoms;
+    int      nalloc;
+} t_ilist;
+
+/*
+ * The struct t_ilist defines a list of atoms with their interactions.
+ * General field description:
+ *   int nr
+ *	the size (nr elements) of the interactions array (iatoms[]).
+ *   t_iatom *iatoms
+ *  specifies which atoms are involved in an interaction of a certain
+ *       type. The layout of this array is as follows:
+ *
+ *	  +-----+---+---+---+-----+---+---+-----+---+---+---+-----+---+---+...
+ *	  |type1|at1|at2|at3|type2|at1|at2|type1|at1|at2|at3|type3|at1|at2|
+ *	  +-----+---+---+---+-----+---+---+-----+---+---+---+-----+---+---+...
+ *
+ *  So for interaction type type1 3 atoms are needed, and for type2 and
+ *      type3 only 2. The type identifier is used to select the function to
+ *	calculate the interaction and its actual parameters. This type
+ *	identifier is an index in a params[] and functype[] array.
+ */
+
+typedef struct
+{
+    real *cmap; /* Has length 4*grid_spacing*grid_spacing, */
+    /* there are 4 entries for each cmap type (V,dVdx,dVdy,d2dVdxdy) */
+} cmapdata_t;
+
+typedef struct
+{
+    int         ngrid;        /* Number of allocated cmap (cmapdata_t ) grids */
+    int         grid_spacing; /* Grid spacing */
+    cmapdata_t *cmapdata;     /* Pointer to grid with actual, pre-interpolated data */
+} gmx_cmap_t;
+
+
+typedef struct
+{
+    int         ntypes;
+    int         atnr;
+    t_functype *functype;
+    t_iparams  *iparams;
+    double      reppow;    /* The repulsion power for VdW: C12*r^-reppow   */
+    real        fudgeQQ;   /* The scaling factor for Coulomb 1-4: f*q1*q2  */
+    gmx_cmap_t  cmap_grid; /* The dihedral correction maps                 */
+} gmx_ffparams_t;
+
+enum {
+    ilsortUNKNOWN, ilsortNO_FE, ilsortFE_UNSORTED, ilsortFE_SORTED
+};
+
+typedef struct
+{
+    int         ntypes;
+    int         atnr;
+    t_functype *functype;
+    t_iparams  *iparams;
+    real        fudgeQQ;
+    gmx_cmap_t  cmap_grid;
+    t_iparams  *iparams_posres, *iparams_fbposres;
+    int         iparams_posres_nalloc, iparams_fbposres_nalloc;
+
+    t_ilist     il[F_NRE];
+    int         ilsort;
+} t_idef;
+
+/*
+ * The struct t_idef defines all the interactions for the complete
+ * simulation. The structure is setup in such a way that the multinode
+ * version of the program  can use it as easy as the single node version.
+ * General field description:
+ *   int ntypes
+ *	defines the number of elements in functype[] and param[].
+ *   int nodeid
+ *      the node id (if parallel machines)
+ *   int atnr
+ *      the number of atomtypes
+ *   t_functype *functype
+ *	array of length ntypes, defines for every force type what type of
+ *      function to use. Every "bond" with the same function but different
+ *	force parameters is a different force type. The type identifier in the
+ *	forceatoms[] array is an index in this array.
+ *   t_iparams *iparams
+ *	array of length ntypes, defines the parameters for every interaction
+ *      type. The type identifier in the actual interaction list
+ *      (ilist[ftype].iatoms[]) is an index in this array.
+ *   gmx_cmap_t cmap_grid
+ *      the grid for the dihedral pair correction maps.
+ *   t_iparams *iparams_posres, *iparams_fbposres
+ *	defines the parameters for position restraints only.
+ *      Position restraints are the only interactions that have different
+ *      parameters (reference positions) for different molecules
+ *      of the same type. ilist[F_POSRES].iatoms[] is an index in this array.
+ *   t_ilist il[F_NRE]
+ *      The list of interactions for each type. Note that some,
+ *      such as LJ and COUL will have 0 entries.
+ */
+
+typedef struct {
+    int   n;      /* n+1 is the number of points */
+    real  scale;  /* distance between two points */
+    real *data;   /* the actual table data, per point there are 4 numbers */
+} bondedtable_t;
+
+!!ifunc.h
+
+#include "idef.h"
+#include "mdatom.h"
+#include "fcdata.h"
+#include "graph.h"
+#include "pbc.h"
+
+typedef real t_ifunc (int nbonds, const t_iatom iatoms[],
+                      const t_iparams iparams[],
+                      const rvec x[], rvec f[], rvec fshift[],
+                      const t_pbc *pbc, const t_graph *g,
+                      real lambda, real *dvdlambda,
+                      const t_mdatoms *md, t_fcdata *fcd,
+                      int *ddgatindex);
+
+/*
+ * The function type t_ifunc() calculates one interaction, using iatoms[]
+ * and iparams. Within the function the number of atoms to be used is
+ * known. Within the function only the atomid part of the iatoms[] array
+ * is supplied, not the type field (see also t_ilist). The function
+ * returns the potential energy. If pbc==NULL the coordinates in x are
+ * assumed to be such that no calculation of PBC is necessary,
+ * If pbc!=NULL a full PBC calculation is performed.
+ * If g!=NULL it is used for determining the shift forces.
+ * With domain decomposition ddgatindex can be used for getting global
+ * atom numbers for warnings and error messages.
+ * ddgatindex is NULL when domain decomposition is not used.
+ */
+
+#define IF_NULL       0
+#define IF_BOND       1
+#define IF_VSITE      1<<1
+#define IF_CONSTRAINT 1<<2
+#define IF_CHEMBOND   1<<3
+#define IF_BTYPE      1<<4
+#define IF_ATYPE      1<<5
+#define IF_TABULATED  1<<6
+#define IF_LIMZERO    1<<7
+/* These flags tell to some of the routines what can be done with this
+ * item in the list.
+ * With IF_BOND a bonded interaction will be calculated.
+ * With IF_BTYPE grompp can convert the bond to a Morse potential.
+ * With IF_BTYPE or IF_ATYPE the bond/angle can be converted to
+ * a constraint or used for vsite parameter determination by grompp.
+ * IF_LIMZERO indicates that for a bonded interaction the potential
+ * does goes to zero for large distances, thus if such an interaction
+ * it not assigned to any node by the domain decompostion, the simulation
+ * still continue, if mdrun has been told so.
+ */
+typedef struct
+{
+    const char *name;         /* the name of this function			*/
+    const char *longname;     /* The name for printing etc.                   */
+    int         nratoms;      /* nr of atoms needed for this function		*/
+    int         nrfpA, nrfpB; /* number of parameters for this function.      */
+                              /* this corresponds to the number of params in  */
+                              /* iparams struct! (see idef.h)                 */
+    /* A and B are for normal and free energy components respectively.    */
+    unsigned long   flags;    /* Flags (see above)                            */
+    int             nrnb_ind; /* index for nrnb (-1 if unknown)               */
+    t_ifunc        *ifunc;    /* the function it self				*/
+} t_interaction_function;
+
+#define NRFPA(ftype) (interaction_function[(ftype)].nrfpA)
+#define NRFPB(ftype) (interaction_function[(ftype)].nrfpB)
+#define NRFP(ftype)  (NRFPA(ftype)+NRFPB(ftype))
+#define NRAL(ftype) (interaction_function[(ftype)].nratoms)
+
+#define IS_CHEMBOND(ftype) (interaction_function[(ftype)].nratoms == 2 && (interaction_function[(ftype)].flags & IF_CHEMBOND))
+/* IS_CHEMBOND tells if function type ftype represents a chemical bond */
+
+/* IS_ANGLE tells if a function type ftype represents an angle
+ * Per Larsson, 2007-11-06
+ */
+#define IS_ANGLE(ftype) (interaction_function[(ftype)].nratoms == 3 && (interaction_function[(ftype)].flags & IF_ATYPE))
+#define IS_VSITE(ftype) (interaction_function[(ftype)].flags & IF_VSITE)
+
+#define IS_TABULATED(ftype) (interaction_function[(ftype)].flags & IF_TABULATED)
+
+extern const t_interaction_function interaction_function[F_NRE];
+/* initialised interaction functions descriptor		
+
+!!inputrec.h
+
+#include "simple.h"
+#include "../sysstuff.h"
+
+typedef struct {
+    int   n;    /* Number of terms				*/
+    real *a;    /* Coeffients (V / nm )                     */
+    real *phi;  /* Phase angles					*/
+} t_cosines;
+
+typedef struct {
+    real E0;            /* Field strength (V/nm)                        */
+    real omega;         /* Frequency (1/ps)                             */
+    real t0;            /* Centre of the Gaussian pulse (ps)            */
+    real sigma;         /* Width of the Gaussian pulse (FWHM) (ps)      */
+} t_efield;
+
+#define EGP_EXCL  (1<<0)
+#define EGP_TABLE (1<<1)
+
+typedef struct {
+    int       ngtc;           /* # T-Coupl groups                        */
+    int       nhchainlength;  /* # of nose-hoover chains per group       */
+    int       ngacc;          /* # Accelerate groups                     */
+    int       ngfrz;          /* # Freeze groups                         */
+    int       ngener;         /* # Ener groups			    */
+    real     *nrdf;           /* Nr of degrees of freedom in a group	    */
+    real     *ref_t;          /* Coupling temperature	per group   */
+    int      *annealing;      /* No/simple/periodic SA for each group    */
+    int      *anneal_npoints; /* Number of annealing time points per grp */
+    real    **anneal_time;    /* For ea. group: Time points              */
+    real    **anneal_temp;    /* For ea. grp: Temperature at these times */
+                              /* Final temp after all intervals is ref_t */
+    real     *tau_t;          /* Tau coupling time              */
+    rvec     *acc;            /* Acceleration per group		    */
+    ivec     *nFreeze;        /* Freeze the group in each direction ?    */
+    int      *egp_flags;      /* Exclusions/tables of energy group pairs */
+
+    /* QMMM stuff */
+    int          ngQM;         /* nr of QM groups                              */
+    int         *QMmethod;     /* Level of theory in the QM calculation        */
+    int         *QMbasis;      /* Basisset in the QM calculation               */
+    int         *QMcharge;     /* Total charge in the QM region                */
+    int         *QMmult;       /* Spin multiplicicty in the QM region          */
+    gmx_bool    *bSH;          /* surface hopping (diabatic hop only)          */
+    int         *CASorbitals;  /* number of orbiatls in the active space       */
+    int         *CASelectrons; /* number of electrons in the active space      */
+    real        *SAon;         /* at which gap (A.U.) the SA is switched on    */
+    real        *SAoff;
+    int         *SAsteps;      /* in how many steps SA goes from 1-1 to 0.5-0.5*/
+    gmx_bool    *bOPT;
+    gmx_bool    *bTS;
+} t_grpopts;
+
+enum {
+    epgrppbcNONE, epgrppbcREFAT, epgrppbcCOS
+};
+
+typedef struct {
+    int         nat;        /* Number of atoms in the pull group */
+    atom_id    *ind;        /* The global atoms numbers */
+    int         nat_loc;    /* Number of local pull atoms */
+    int         nalloc_loc; /* Allocation size for ind_loc and weight_loc */
+    atom_id    *ind_loc;    /* Local pull indices */
+    int         nweight;    /* The number of weights (0 or nat) */
+    real       *weight;     /* Weights (use all 1 when weight==NULL) */
+    real       *weight_loc; /* Weights for the local indices */
+    int         epgrppbc;   /* The type of pbc for this pull group, see enum above */
+    atom_id     pbcatom;    /* The reference atom for pbc (global number) */
+    rvec        vec;        /* The pull vector, direction or position */
+    rvec        init;       /* Initial reference displacement */
+    real        rate;       /* Rate of motion (nm/ps) */
+    real        k;          /* force constant */
+    real        kB;         /* force constant for state B */
+    real        wscale;     /* scaling factor for the weights: sum w m/sum w w m */
+    real        invtm;      /* inverse total mass of the group: 1/wscale sum w m */
+    dvec        x;          /* center of mass before update */
+    dvec        xp;         /* center of mass after update before constraining */
+    dvec        dr;         /* The distance from the reference group */
+    double      f_scal;     /* Scalar force for directional pulling */
+    dvec        f;          /* force due to the pulling/constraining */
+} t_pullgrp;
+
+typedef struct {
+    int   eSimTempScale; /* simulated temperature scaling; linear or exponential */
+    real  simtemp_low;   /* the low temperature for simulated tempering  */
+    real  simtemp_high;  /* the high temperature for simulated tempering */
+    real *temperatures;  /* the range of temperatures used for simulated tempering */
+} t_simtemp;
+
+typedef struct {
+    int    nstdhdl;                 /* The frequency for calculating dhdl           */
+    double init_lambda;             /* fractional value of lambda (usually will use
+                                       init_fep_state, this will only be for slow growth,
+                                       and for legacy free energy code. Only has a
+                                       valid value if positive)   */
+    int      init_fep_state;        /* the initial number of the state                   */
+    double   delta_lambda;          /* change of lambda per time step (fraction of (0.1) */
+    gmx_bool bPrintEnergy;          /* Whether to print the energy in the dhdl           */
+    int      n_lambda;              /* The number of foreign lambda points               */
+    double **all_lambda;            /* The array of all lambda values                    */
+    int      lambda_neighbors;      /* The number of neighboring lambda states to
+                                       calculate the energy for in up and down directions
+                                       (-1 for all) */
+    int      lambda_start_n;        /* The first lambda to calculate energies for */
+    int      lambda_stop_n;         /* The last lambda +1 to calculate energies for */
+    real     sc_alpha;              /* free energy soft-core parameter                   */
+    int      sc_power;              /* lambda power for soft-core interactions           */
+    real     sc_r_power;            /* r power for soft-core interactions                */
+    real     sc_sigma;              /* free energy soft-core sigma when c6 or c12=0      */
+    real     sc_sigma_min;          /* free energy soft-core sigma for ?????             */
+    gmx_bool bScCoul;               /* use softcore for the coulomb portion as well (default FALSE) */
+    gmx_bool separate_dvdl[efptNR]; /* whether to print the dvdl term associated with
+                                       this term; if it is not specified as separate,
+                                       it is lumped with the FEP term */
+    int    separate_dhdl_file;      /* whether to write a separate dhdl.xvg file
+                                       note: NOT a gmx_bool, but an enum */
+    int    dhdl_derivatives;        /* whether to calculate+write dhdl derivatives
+                                       note: NOT a gmx_bool, but an enum */
+    int    dh_hist_size;            /* The maximum table size for the dH histogram */
+    double dh_hist_spacing;         /* The spacing for the dH histogram */
+} t_lambda;
+
+typedef struct {
+    int      nstexpanded;         /* The frequency of expanded ensemble state changes */
+    int      elamstats;           /* which type of move updating do we use for lambda monte carlo (or no for none) */
+    int      elmcmove;            /* what move set will be we using for state space moves */
+    int      elmceq;              /* the method we use to decide of we have equilibrated the weights */
+    int      equil_n_at_lam;      /* the minumum number of samples at each lambda for deciding whether we have reached a minimum */
+    real     equil_wl_delta;      /* WL delta at which we stop equilibrating weights */
+    real     equil_ratio;         /* use the ratio of weights (ratio of minimum to maximum) to decide when to stop equilibrating */
+    int      equil_steps;         /* after equil_steps steps we stop equilibrating the weights */
+    int      equil_samples;       /* after equil_samples total samples (steps/nstfep), we stop equilibrating the weights */
+    int      lmc_seed;            /* random number seed for lambda mc switches */
+    gmx_bool minvar;              /* whether to use minumum variance weighting */
+    int      minvarmin;           /* the number of samples needed before kicking into minvar routine */
+    real     minvar_const;        /* the offset for the variance in MinVar */
+    int      c_range;             /* range of cvalues used for BAR */
+    gmx_bool bSymmetrizedTMatrix; /* whether to print symmetrized matrices */
+    int      nstTij;              /* How frequently to print the transition matrices */
+    int      lmc_repeats;         /* number of repetitions in the MC lambda jumps */  /*MRS -- VERIFY THIS */
+    int      lmc_forced_nstart;   /* minimum number of samples for each state before free sampling */ /* MRS -- VERIFY THIS! */
+    int      gibbsdeltalam;       /* distance in lambda space for the gibbs interval */
+    real     wl_scale;            /* scaling factor for wang-landau */
+    real     wl_ratio;            /* ratio between largest and smallest number for freezing the weights */
+    real     init_wl_delta;       /* starting delta for wang-landau */
+    gmx_bool bWLoneovert;         /* use one over t convergece for wang-landau when the delta get sufficiently small */
+    gmx_bool bInit_weights;       /* did we initialize the weights? */
+    real     mc_temp;             /* To override the main temperature, or define it if it's not defined */
+    real    *init_lambda_weights; /* user-specified initial weights to start with  */
+} t_expanded;
+
+typedef struct {
+    int            ngrp;       /* number of groups */
+    int            eGeom;      /* pull geometry */
+    ivec           dim;        /* used to select components for constraint */
+    real           cyl_r1;     /* radius of cylinder for dynamic COM */
+    real           cyl_r0;     /* radius of cylinder including switch length */
+    real           constr_tol; /* absolute tolerance for constraints in (nm) */
+    int            nstxout;    /* Output frequency for pull x */
+    int            nstfout;    /* Output frequency for pull f */
+    int            ePBC;       /* the boundary conditions */
+    int            npbcdim;    /* do pbc in dims 0 <= dim < npbcdim */
+    gmx_bool       bRefAt;     /* do we need reference atoms for a group COM ? */
+    int            cosdim;     /* dimension for cosine weighting, -1 if none */
+    gmx_bool       bVirial;    /* do we need to add the pull virial? */
+    t_pullgrp     *grp;        /* groups to pull/restrain/etc/ */
+    t_pullgrp     *dyna;       /* dynamic groups for use with local constraints */
+    rvec          *rbuf;       /* COM calculation buffer */
+    dvec          *dbuf;       /* COM calculation buffer */
+    double        *dbuf_cyl;   /* cylinder ref. groups COM calculation buffer */
+
+    FILE          *out_x;      /* output file for pull data */
+    FILE          *out_f;      /* output file for pull data */
+} t_pull;
+
+
+/* Abstract types for enforced rotation only defined in pull_rotation.c       */
+typedef struct gmx_enfrot *gmx_enfrot_t;
+typedef struct gmx_enfrotgrp *gmx_enfrotgrp_t;
+
+typedef struct {
+    int         eType;             /* Rotation type for this group                  */
+    int         bMassW;            /* Use mass-weighed positions?                   */
+    int         nat;               /* Number of atoms in the group                  */
+    atom_id    *ind;               /* The global atoms numbers                      */
+    rvec       *x_ref;             /* The reference positions                       */
+    rvec        vec;               /* The normalized rotation vector                */
+    real        rate;              /* Rate of rotation (degree/ps)                  */
+    real        k;                 /* Force constant (kJ/(mol nm^2)                 */
+    rvec        pivot;             /* Pivot point of rotation axis (nm)             */
+    int         eFittype;          /* Type of fit to determine actual group angle   */
+    int         PotAngle_nstep;    /* Number of angles around the reference angle
+                                      for which the rotation potential is also
+                                      evaluated (for fit type 'potential' only)     */
+    real            PotAngle_step; /* Distance between two angles in degrees (for
+                                      fit type 'potential' only)                    */
+    real            slab_dist;     /* Slab distance (nm)                            */
+    real            min_gaussian;  /* Minimum value the gaussian must have so that
+                                      the force is actually evaluated               */
+    real            eps;           /* Additive constant for radial motion2 and
+                                      flexible2 potentials (nm^2)                   */
+    gmx_enfrotgrp_t enfrotgrp;     /* Stores non-inputrec rotation data per group   */
+} t_rotgrp;
+
+typedef struct {
+    int          ngrp;       /* Number of rotation groups                     */
+    int          nstrout;    /* Output frequency for main rotation outfile    */
+    int          nstsout;    /* Output frequency for per-slab data            */
+    t_rotgrp    *grp;        /* Groups to rotate                              */
+    gmx_enfrot_t enfrot;     /* Stores non-inputrec enforced rotation data    */
+} t_rot;
+
+
+typedef struct {
+    int      type;           /* type of AdResS simulation                    */
+    gmx_bool bnew_wf;        /* enable new AdResS weighting function         */
+    gmx_bool bchempot_dx;    /*true:interaction table format input is F=-dmu/dx   false: dmu_dwp  */
+    gmx_bool btf_full_box;   /* true: appy therm force everywhere in the box according to table false: only in hybrid region */
+    real     const_wf;       /* value of weighting function for eAdressConst */
+    real     ex_width;       /* center of the explicit zone                  */
+    real     hy_width;       /* width of the hybrid zone                     */
+    int      icor;           /* type of interface correction                 */
+    int      site;           /* AdResS CG site location                      */
+    rvec     refs;           /* Coordinates for AdResS reference             */
+    real     ex_forcecap;    /* in the hybrid zone, cap forces large then this to adress_ex_forcecap */
+    gmx_bool do_hybridpairs; /* If true pair interaction forces are also scaled in an adress way*/
+
+    int    * tf_table_index; /* contains mapping of energy group index -> i-th adress tf table*/
+    int      n_tf_grps;
+    int     *group_explicit;
+    int      n_energy_grps;
+} t_adress;
+
+typedef struct {
+    int             eI;                   /* Integration method                 */
+    gmx_large_int_t nsteps;               /* number of steps to be taken			*/
+    int             simulation_part;      /* Used in checkpointing to separate chunks */
+    gmx_large_int_t init_step;            /* start at a stepcount >0 (used w. tpbconv)    */
+    int             nstcalcenergy;        /* frequency of energy calc. and T/P coupl. upd.	*/
+    int             cutoff_scheme;        /* group or verlet cutoffs     */
+    int             ns_type;              /* which ns method should we use?               */
+    int             nstlist;              /* number of steps before pairlist is generated	*/
+    int             ndelta;               /* number of cells per rlong			*/
+    int             nstcomm;              /* number of steps after which center of mass	*/
+    /* motion is removed				*/
+    int             comm_mode;            /* Center of mass motion removal algorithm      */
+    int             nstcheckpoint;        /* checkpointing frequency                      */
+    int             nstlog;               /* number of steps after which print to logfile	*/
+    int             nstxout;              /* number of steps after which X is output	*/
+    int             nstvout;              /* id. for V					*/
+    int             nstfout;              /* id. for F					*/
+    int             nstenergy;            /* number of steps after which energies printed */
+    int             nstxtcout;            /* id. for compressed trj (.xtc)		*/
+    double          init_t;               /* initial time (ps)              */
+    double          delta_t;              /* time step (ps)				*/
+    real            xtcprec;              /* precision of xtc file                        */
+    real            fourier_spacing;      /* requested fourier_spacing, when nk? not set  */
+    int             nkx, nky, nkz;        /* number of k vectors in each spatial dimension*/
+                                          /* for fourier methods for long range electrost.*/
+    int             pme_order;            /* interpolation order for PME                  */
+    real            ewald_rtol;           /* Real space tolerance for Ewald, determines   */
+                                          /* the real/reciprocal space relative weight    */
+    int             ewald_geometry;       /* normal/3d ewald, or pseudo-2d LR corrections */
+    real            epsilon_surface;      /* Epsilon for PME dipole correction            */
+    gmx_bool        bOptFFT;              /* optimize the fft plan at start               */
+    int             ePBC;                 /* Type of periodic boundary conditions		*/
+    int             bPeriodicMols;        /* Periodic molecules                           */
+    gmx_bool        bContinuation;        /* Continuation run: starting state is correct	*/
+    int             etc;                  /* temperature coupling               */
+    int             nsttcouple;           /* interval in steps for temperature coupling   */
+    gmx_bool        bPrintNHChains;       /* whether to print nose-hoover chains        */
+    int             epc;                  /* pressure coupling                            */
+    int             epct;                 /* pressure coupling type			*/
+    int             nstpcouple;           /* interval in steps for pressure coupling      */
+    real            tau_p;                /* pressure coupling time (ps)			*/
+    tensor          ref_p;                /* reference pressure (kJ/(mol nm^3))		*/
+    tensor          compress;             /* compressability ((mol nm^3)/kJ)        */
+    int             refcoord_scaling;     /* How to scale absolute reference coordinates  */
+    rvec            posres_com;           /* The COM of the posres atoms                  */
+    rvec            posres_comB;          /* The B-state COM of the posres atoms          */
+    int             andersen_seed;        /* Random seed for Andersen thermostat (obsolete) */
+    real            verletbuf_drift;      /* Max. drift (kJ/mol/ps/atom) for list buffer  */
+    real            rlist;                /* short range pairlist cut-off (nm)		*/
+    real            rlistlong;            /* long range pairlist cut-off (nm)		*/
+    int             nstcalclr;            /* Frequency of evaluating direct space long-range interactions */
+    real            rtpi;                 /* Radius for test particle insertion           */
+    int             coulombtype;          /* Type of electrostatics treatment             */
+    int             coulomb_modifier;     /* Modify the Coulomb interaction              */
+    real            rcoulomb_switch;      /* Coulomb switch range start (nm)		*/
+    real            rcoulomb;             /* Coulomb cutoff (nm)		                */
+    real            epsilon_r;            /* relative dielectric constant                 */
+    real            epsilon_rf;           /* relative dielectric constant of the RF       */
+    int             implicit_solvent;     /* No (=explicit water), or GBSA solvent models */
+    int             gb_algorithm;         /* Algorithm to use for calculation Born radii  */
+    int             nstgbradii;           /* Frequency of updating Generalized Born radii */
+    real            rgbradii;             /* Cutoff for GB radii calculation              */
+    real            gb_saltconc;          /* Salt concentration (M) for GBSA models       */
+    real            gb_epsilon_solvent;   /* dielectric coeff. of implicit solvent     */
+    real            gb_obc_alpha;         /* 1st scaling factor for Bashford-Case GB      */
+    real            gb_obc_beta;          /* 2nd scaling factor for Bashford-Case GB      */
+    real            gb_obc_gamma;         /* 3rd scaling factor for Bashford-Case GB      */
+    real            gb_dielectric_offset; /* Dielectric offset for Still/HCT/OBC     */
+    int             sa_algorithm;         /* Algorithm for SA part of GBSA                */
+    real            sa_surface_tension;   /* Energy factor for SA part of GBSA */
+    int             vdwtype;              /* Type of Van der Waals treatment              */
+    int             vdw_modifier;         /* Modify the VdW interaction                   */
+    real            rvdw_switch;          /* Van der Waals switch range start (nm)        */
+    real            rvdw;                 /* Van der Waals cutoff (nm)	        */
+    int             eDispCorr;            /* Perform Long range dispersion corrections    */
+    real            tabext;               /* Extension of the table beyond the cut-off,   *
+                                           * as well as the table length for 1-4 interac. */
+    real            shake_tol;            /* tolerance for shake				*/
+    int             efep;                 /* free energy calculations                     */
+    t_lambda       *fepvals;              /* Data for the FEP state                       */
+    gmx_bool        bSimTemp;             /* Whether to do simulated tempering            */
+    t_simtemp      *simtempvals;          /* Variables for simulated tempering            */
+    gmx_bool        bExpanded;            /* Whether expanded ensembles are used          */
+    t_expanded     *expandedvals;         /* Expanded ensemble parameters              */
+    int             eDisre;               /* Type of distance restraining                 */
+    real            dr_fc;                /* force constant for ta_disre			*/
+    int             eDisreWeighting;      /* type of weighting of pairs in one restraints	*/
+    gmx_bool        bDisreMixed;          /* Use comb of time averaged and instan. viol's	*/
+    int             nstdisreout;          /* frequency of writing pair distances to enx   */
+    real            dr_tau;               /* time constant for memory function in disres    */
+    real            orires_fc;            /* force constant for orientational restraints  */
+    real            orires_tau;           /* time constant for memory function in orires    */
+    int             nstorireout;          /* frequency of writing tr(SD) to enx           */
+    real            dihre_fc;             /* force constant for dihedral restraints (obsolete)	*/
+    real            em_stepsize;          /* The stepsize for updating			*/
+    real            em_tol;               /* The tolerance				*/
+    int             niter;                /* Number of iterations for convergence of      */
+                                          /* steepest descent in relax_shells             */
+    real            fc_stepsize;          /* Stepsize for directional minimization        */
+                                          /* in relax_shells                              */
+    int             nstcgsteep;           /* number of steps after which a steepest       */
+                                          /* descents step is done while doing cg         */
+    int             nbfgscorr;            /* Number of corrections to the hessian to keep */
+    int             eConstrAlg;           /* Type of constraint algorithm                 */
+    int             nProjOrder;           /* Order of the LINCS Projection Algorithm      */
+    real            LincsWarnAngle;       /* If bond rotates more than %g degrees, warn   */
+    int             nLincsIter;           /* Number of iterations in the final Lincs step */
+    gmx_bool        bShakeSOR;            /* Use successive overrelaxation for shake      */
+    real            bd_fric;              /* Friction coefficient for BD (amu/ps)         */
+    int             ld_seed;              /* Random seed for SD and BD                    */
+    int             nwall;                /* The number of walls                          */
+    int             wall_type;            /* The type of walls                            */
+    real            wall_r_linpot;        /* The potentail is linear for r<=wall_r_linpot */
+    int             wall_atomtype[2];     /* The atom type for walls                      */
+    real            wall_density[2];      /* Number density for walls                     */
+    real            wall_ewald_zfac;      /* Scaling factor for the box for Ewald         */
+    int             ePull;                /* Type of pulling: no, umbrella or constraint  */
+    t_pull         *pull;                 /* The data for center of mass pulling          */
+    gmx_bool        bRot;                 /* Calculate enforced rotation potential(s)?    */
+    t_rot          *rot;                  /* The data for enforced rotation potentials    */
+    real            cos_accel;            /* Acceleration for viscosity calculation       */
+    tensor          deform;               /* Triclinic deformation velocities (nm/ps)     */
+    int             userint1;             /* User determined parameters                   */
+    int             userint2;
+    int             userint3;
+    int             userint4;
+    real            userreal1;
+    real            userreal2;
+    real            userreal3;
+    real            userreal4;
+    t_grpopts       opts;          /* Group options				*/
+    t_cosines       ex[DIM];       /* Electric field stuff	(spatial part)		*/
+    t_cosines       et[DIM];       /* Electric field stuff	(time part)		*/
+    gmx_bool        bQMMM;         /* QM/MM calculation                            */
+    int             QMconstraints; /* constraints on QM bonds                      */
+    int             QMMMscheme;    /* Scheme: ONIOM or normal                      */
+    real            scalefactor;   /* factor for scaling the MM charges in QM calc.*/
+                                   /* parameter needed for AdResS simulation       */
+    gmx_bool        bAdress;       /* Is AdResS enabled ? */
+    t_adress       *adress;        /* The data for adress simulations */
+} t_inputrec;
+
+#define DEFORM(ir) ((ir).deform[XX][XX] != 0 || (ir).deform[YY][YY] != 0 || (ir).deform[ZZ][ZZ] != 0 || (ir).deform[YY][XX] != 0 || (ir).deform[ZZ][XX] != 0 || (ir).deform[ZZ][YY] != 0)
+
+#define DYNAMIC_BOX(ir) ((ir).epc != epcNO || (ir).eI == eiTPI || DEFORM(ir))
+
+#define PRESERVE_SHAPE(ir) ((ir).epc != epcNO && (ir).deform[XX][XX] == 0 && ((ir).epct == epctISOTROPIC || (ir).epct == epctSEMIISOTROPIC))
+
+#define NEED_MUTOT(ir) (((ir).coulombtype == eelEWALD || EEL_PME((ir).coulombtype)) && ((ir).ewald_geometry == eewg3DC || (ir).epsilon_surface != 0))
+
+#define IR_TWINRANGE(ir) ((ir).rlist > 0 && ((ir).rlistlong == 0 || (ir).rlistlong > (ir).rlist))
+
+#define IR_ELEC_FIELD(ir) ((ir).ex[XX].n > 0 || (ir).ex[YY].n > 0 || (ir).ex[ZZ].n > 0)
+
+#define IR_EXCL_FORCES(ir) (EEL_FULL((ir).coulombtype) || (EEL_RF((ir).coulombtype) && (ir).coulombtype != eelRF_NEC) || (ir).implicit_solvent != eisNO)
+/* use pointer definitions of ir here, since that's what's usually used in the code */
+#define IR_NPT_TROTTER(ir) ((((ir)->eI == eiVV) || ((ir)->eI == eiVVAK)) && (((ir)->epc == epcMTTK) && ((ir)->etc == etcNOSEHOOVER)))
+
+#define IR_NVT_TROTTER(ir) ((((ir)->eI == eiVV) || ((ir)->eI == eiVVAK)) && ((!((ir)->epc == epcMTTK)) && ((ir)->etc == etcNOSEHOOVER)))
+
+#define IR_NPH_TROTTER(ir) ((((ir)->eI == eiVV) || ((ir)->eI == eiVVAK)) && (((ir)->epc == epcMTTK) && (!(((ir)->etc == etcNOSEHOOVER)))))
+
+!! interaction_const.h 
+typedef struct {
+    /* VdW */
+    real rvdw;
+    real sh_invrc6; /* For shifting the LJ potential */
+
+    /* type of electrostatics (defined in enums.h) */
+    int  eeltype;
+
+    /* Coulomb */
+    real rcoulomb;
+
+    /* Cut-off */
+    real rlist;
+    real rlistlong;
+
+    /* PME/Ewald */
+    real ewaldcoeff;
+    real sh_ewald;   /* For shifting the Ewald potential */
+
+    /* Dielectric constant resp. multiplication factor for charges */
+    real epsilon_r;
+    real epsfac;
+
+    /* Constants for reaction-field or plain cut-off */
+    real epsilon_rf;
+    real k_rf;
+    real c_rf;
+
+    /* Force/energy interpolation tables, linear in force, quadratic in V */
+    real  tabq_scale;
+    int   tabq_size;
+    /* Coulomb force table, size of array is tabq_size (when used) */
+    real *tabq_coul_F;
+    /* Coulomb energy table, size of array is tabq_size (when used) */
+    real *tabq_coul_V;
+    /* Coulomb force+energy table, size of array is tabq_size*4,
+       entry quadruplets are: F[i], F[i+1]-F[i], V[i], 0,
+       this is used with single precision x86 SIMD for aligned loads */
+    real *tabq_coul_FDV0;
+} interaction_const_t;
+
+!! ishift.h
+
+/* not really neccesary, right now: */
+#define D_BOX_Z 1
+#define D_BOX_Y 1
+#define D_BOX_X 2
+#define N_BOX_Z (2*D_BOX_Z+1)
+#define N_BOX_Y (2*D_BOX_Y+1)
+#define N_BOX_X (2*D_BOX_X+1)
+#define N_IVEC  (N_BOX_Z*N_BOX_Y*N_BOX_X)
+#define CENTRAL (N_IVEC/2)
+#define SHIFTS  N_IVEC
+
+#define XYZ2IS(x, y, z) (N_BOX_X*(N_BOX_Y*((z)+D_BOX_Z)+(y)+D_BOX_Y)+(x)+D_BOX_X)
+#define IVEC2IS(iv)   (XYZ2IS((iv)[XX], (iv)[YY], (iv)[ZZ]))
+#define IS2X(iv)      (((iv) % N_BOX_X) - D_BOX_X)
+#define IS2Y(iv)      ((((iv) / N_BOX_X) % N_BOX_Y) - D_BOX_Y)
+#define IS2Z(iv)      ((iv) / (N_BOX_X*N_BOX_Y) - D_BOX_Z)
+
+!! iteratedconstraints.h
+
+/* iterate constraints up to 50 times  */
+#define MAXITERCONST       50
+
+/* data type */
+typedef struct
+{
+    real     f, fprev, x, xprev;
+    int      iter_i;
+    gmx_bool bIterationActive;
+    real     allrelerr[MAXITERCONST+2];
+    int      num_close; /* number of "close" violations, caused by limited precision. */
+} gmx_iterate_t;
+
+void gmx_iterate_init(gmx_iterate_t *iterate, gmx_bool bIterate);
+
+gmx_bool done_iterating(const t_commrec *cr, FILE *fplog, int nsteps, gmx_iterate_t *iterate, gmx_bool bFirstIterate, real fom, real *newf);
 
 
 
