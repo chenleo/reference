@@ -1495,6 +1495,127 @@ typedef struct {
     int set[eglsNR]; /* The communicated signal, equal for all processes */
 } globsig_t;
 
+!!graph.h
+#include "idef.h"
+
+typedef enum {
+    egcolWhite, egcolGrey, egcolBlack, egcolNR
+} egCol;
+
+typedef struct {
+    int          at0;       /* The first atom the graph was constructed for */
+    int          at1;       /* The last atom the graph was constructed for */
+    int          nnodes;    /* The number of nodes, nnodes=at_end-at_start	*/
+    int          nbound;    /* The number of nodes with edges		*/
+    int          at_start;  /* The first connected atom in this graph	*/
+    int          at_end;    /* The last+1 connected atom in this graph	*/
+    int         *nedge;     /* For each node the number of edges		*/
+    atom_id    **edge;      /* For each node, the actual edges (bidirect.)	*/
+    gmx_bool     bScrewPBC; /* Screw boundary conditions                    */
+    ivec        *ishift;    /* Shift for each particle                  */
+    int          negc;
+    egCol       *egc;       /* color of each node */
+} t_graph;
+
+
+#define SHIFT_IVEC(g, i) ((g)->ishift[i])
+
+!!group.h
+#include "simple.h"
+
+typedef struct {
+    real    Th;             /* Temperature at half step        */
+    real    T;              /* Temperature at full step        */
+    tensor  ekinh;          /* Kinetic energy at half step     */
+    tensor  ekinh_old;      /* Kinetic energy at old half step */
+    tensor  ekinf;          /* Kinetic energy at full step     */
+    real    lambda;         /* Berendsen coupling lambda       */
+    double  ekinscalef_nhc; /* Scaling factor for NHC- full step */
+    double  ekinscaleh_nhc; /* Scaling factor for NHC- half step */
+    double  vscale_nhc;     /* Scaling factor for NHC- velocity */
+} t_grp_tcstat;
+
+typedef struct {
+    int     nat;    /* Number of atoms in this group		*/
+    rvec    u;      /* Mean velocities of home particles        */
+    rvec    uold;   /* Previous mean velocities of home particles   */
+    double  mA;     /* Mass for topology A		                */
+    double  mB;     /* Mass for topology B		                */
+} t_grp_acc;
+
+typedef struct {
+    real    cos_accel;  /* The acceleration for the cosine profile      */
+    real    mvcos;      /* The cos momenta of home particles            */
+    real    vcos;       /* The velocity of the cosine profile           */
+} t_cos_acc;
+
+typedef struct {
+    gmx_bool         bNEMD;
+    int              ngtc;            /* The number of T-coupling groups      */
+    t_grp_tcstat    *tcstat;          /* T-coupling data            */
+    tensor         **ekin_work_alloc; /* Allocated locations for *_work members */
+    tensor         **ekin_work;       /* Work arrays for tcstat per thread    */
+    real           **dekindl_work;    /* Work location for dekindl per thread */
+    int              ngacc;           /* The number of acceleration groups    */
+    t_grp_acc       *grpstat;         /* Acceleration data			*/
+    tensor           ekin;            /* overall kinetic energy               */
+    tensor           ekinh;           /* overall 1/2 step kinetic energy      */
+    real             dekindl;         /* dEkin/dlambda at half step           */
+    real             dekindl_old;     /* dEkin/dlambda at old half step       */
+    t_cos_acc        cosacc;          /* Cosine acceleration data             */
+} gmx_ekindata_t;
+
+#define GID(igid, jgid, gnr) ((igid < jgid) ? (igid*gnr+jgid) : (jgid*gnr+igid))
+
+!!hw_info.h
+#include "simple.h"
+#include "nbnxn_cuda_types_ext.h"
+#include "../gmx_cpuid.h"
+
+typedef enum
+{
+    egpuCompatible = 0,  egpuNonexistent,  egpuIncompatible, egpuInsane
+} e_gpu_detect_res_t;
+
+/* Textual names of the GPU detection/check results (see e_gpu_detect_res_t). */
+static const char * const gpu_detect_res_str[] =
+{
+    "compatible", "inexistent", "incompatible", "insane"
+};
+
+/* GPU device information -- for now with only CUDA devices.
+ * The gmx_hardware_detect module initializes it. */
+typedef struct
+{
+    gmx_bool             bUserSet;      /* true if the GPUs in cuda_dev_use are manually provided by the user */
+
+    int                  ncuda_dev_use; /* number of devices selected to be used */
+    int                 *cuda_dev_use;  /* index of the devices selected to be used */
+    int                  ncuda_dev;     /* total number of devices detected */
+    cuda_dev_info_ptr_t  cuda_dev;      /* devices detected in the system (per node) */
+} gmx_gpu_info_t;
+
+/* Hardware information structure with CPU and GPU information.
+ * It is initialized by gmx_detect_hardware().
+ * NOTE: this structure may only contain structures that are globally valid
+ *       (i.e. must be able to be shared among all threads) */
+typedef struct
+{
+    gmx_bool        bCanUseGPU;          /* True if compatible GPUs are detected during hardware detection */
+    gmx_gpu_info_t  gpu_info;            /* Information about GPUs detected in the system */
+
+    gmx_cpuid_t     cpuid_info;          /* CPUID information about CPU detected;
+                                            NOTE: this will only detect the CPU thread 0 of the
+                                            current process runs on. */
+    int             nthreads_hw_avail;   /* Number of hardware threads available; this number
+                                            is based on the number of CPUs reported as available
+                                            by the OS at the time of detection. */
+    gmx_bool        bConsistencyChecked; /* whether
+                                            gmx_check_hw_runconf_consistency()
+                                            has been run with this hw_info */
+} gmx_hw_info_t;
+
+
 
 
 
