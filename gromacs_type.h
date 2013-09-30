@@ -3325,6 +3325,367 @@ typedef struct {
     t_MMrec        *mm;         /* there can only be one MM subsystem !   */
 } t_QMMMrec;
 
+!!shellfc.h
+
+/* Abstract type for shells */
+typedef struct gmx_shellfc *gmx_shellfc_t;
+
+!! state.h
+#include "simple.h"
+
+/*
+ * The t_state struct should contain all the (possibly) non-static
+ * information required to define the state of the system.
+ * Currently the random seeds for SD and BD are missing.
+ */
+
+/* for now, define the length of the NH chains here */
+#define NHCHAINLENGTH 10
+#define MAXLAMBDAS 1024
+
+/* These enums are used in flags as (1<<est...).
+ * The order of these enums should not be changed,
+ * since that affects the checkpoint (.cpt) file format.
+ */
+enum {
+    estLAMBDA,
+    estBOX, estBOX_REL, estBOXV, estPRES_PREV, estNH_XI,  estTC_INT,
+    estX,   estV,       estSDX,  estCGP,       estLD_RNG, estLD_RNGI,
+    estDISRE_INITF, estDISRE_RM3TAV,
+    estORIRE_INITF, estORIRE_DTAV,
+    estSVIR_PREV, estNH_VXI, estVETA, estVOL0, estNHPRES_XI, estNHPRES_VXI, estFVIR_PREV,
+    estFEPSTATE, estMC_RNG, estMC_RNGI,
+    estNR
+};
+
+#define EST_DISTR(e) (!(((e) >= estLAMBDA && (e) <= estTC_INT) || ((e) >= estSVIR_PREV && (e) <= estMC_RNGI)))
+
+/* The names of the state entries, defined in src/gmxlib/checkpoint.c */
+extern const char *est_names[estNR];
+
+typedef struct
+{
+    real  disre_initf;  /* The scaling factor for initializing the time av. */
+    int   ndisrepairs;  /* The number of distance restraints                */
+    real *disre_rm3tav; /* The r^-3 time averaged pair distances            */
+    real  orire_initf;  /* The scaling factor for initializing the time av. */
+    int   norire_Dtav;  /* The number of matrix element in dtav (npair*5)   */
+    real *orire_Dtav;   /* The time averaged orientation tensors            */
+} history_t;
+
+/* Struct used for checkpointing only.
+ * This struct would not be required with unlimited precision.
+ * But because of limited precision, the COM motion removal implementation
+ * can cause the kinetic energy in the MD loop to differ by a few bits from
+ * the kinetic energy one would determine from state.v.
+ */
+typedef struct
+{
+    gmx_bool     bUpToDate;
+    int          ekin_n;
+    tensor      *ekinh;
+    tensor      *ekinf;
+    tensor      *ekinh_old;
+    tensor       ekin_total;
+    double      *ekinscalef_nhc;
+    double      *ekinscaleh_nhc;
+    double      *vscale_nhc;
+    real         dekindl;
+    real         mvcos;
+} ekinstate_t;
+
+/* energy history for delta_h histograms */
+typedef struct
+{
+    int      nndh;             /* the number of energy difference lists */
+    int     *ndh;              /* the number in each energy difference list */
+    real   **dh;               /* the energy difference lists */
+
+    double   start_time;       /* the start time of these energy diff blocks */
+    double   start_lambda;     /* lambda at start time */
+
+    gmx_bool start_lambda_set; /* whether the lambda value is set. Here
+                                  For backward-compatibility. */
+} delta_h_history_t;
+
+typedef struct
+{
+    int      nlambda;        /* total number of lambda states - for history*/
+
+    gmx_bool bEquil;         /* reached equilibration */
+    int     *n_at_lam;       /* number of points observed at each lambda */
+    real    *wl_histo;       /* histogram for WL flatness determination */
+    real     wl_delta;       /* current wang-landau delta */
+
+    real    *sum_weights;    /* weights of the states */
+    real    *sum_dg;         /* free energies of the states -- not actually used for weighting, but informational */
+    real    *sum_minvar;     /* corrections to weights for minimum variance */
+    real    *sum_variance;   /* variances of the states */
+
+    real   **accum_p;        /* accumulated bennett weights for n+1 */
+    real   **accum_m;        /* accumulated bennett weights for n-1 */
+    real   **accum_p2;       /* accumulated squared bennett weights for n+1 */
+    real   **accum_m2;       /* accumulated squared bennett weights for n-1 */
+
+    real   **Tij;            /* transition matrix */
+    real   **Tij_empirical;  /* Empirical transition matrix */
+} df_history_t;
+
+typedef struct
+{
+    gmx_large_int_t    nsteps;       /* The number of steps in the history            */
+    gmx_large_int_t    nsum;         /* The nr. of steps in the ener_ave and ener_sum */
+    double         *   ener_ave;     /* Energy term history sum to get fluctuations   */
+    double         *   ener_sum;     /* Energy term history sum to get fluctuations   */
+    int                nener;        /* Number of energy terms in two previous arrays */
+    gmx_large_int_t    nsteps_sim;   /* The number of steps in ener_sum_sim      */
+    gmx_large_int_t    nsum_sim;     /* The number of frames in ener_sum_sim     */
+    double         *   ener_sum_sim; /* Energy term history sum of the whole sim      */
+
+    delta_h_history_t *dht;          /* The BAR energy differences */
+}
+energyhistory_t;
+
+typedef struct
+{
+    /* If one uses essential dynamics or flooding on a group of atoms from
+     * more than one molecule, we cannot make this group whole with
+     * do_pbc_first_mtop(). We assume that the ED group has the correct PBC
+     * representation at the beginning of the simulation and keep track
+     * of the shifts to always get it into that representation.
+     * For proper restarts from a checkpoint we store the positions of the
+     * reference group at the time of checkpoint writing */
+    gmx_bool      bFromCpt;     /* Did we start from a checkpoint file?       */
+    int           nED;          /* No. of ED/Flooding data sets, if <1 no ED  */
+    int          *nref;         /* No. of atoms in i'th reference structure   */
+    int          *nav;          /* Same for average structure                 */
+    rvec        **old_sref;     /* Positions of the reference atoms
+                                   at the last time step (with correct PBC
+                                   representation)                            */
+    rvec        **old_sref_p;   /* Pointer to these positions                 */
+    rvec        **old_sav;      /* Same for the average positions             */
+    rvec        **old_sav_p;
+}
+edsamstate_t;
+
+typedef struct
+{
+    int              natoms;
+    int              ngtc;
+    int              nnhpres;
+    int              nhchainlength; /* number of nose-hoover chains               */
+    int              nrng;
+    int              nrngi;
+    int              flags;           /* Flags telling which entries are present      */
+    int              fep_state;       /* indicates which of the alchemical states we are in                 */
+    real            *lambda;          /* lambda vector                               */
+    matrix           box;             /* box vector coordinates                         */
+    matrix           box_rel;         /* Relitaive box vectors to preserve shape        */
+    matrix           boxv;            /* box velocitites for Parrinello-Rahman pcoupl */
+    matrix           pres_prev;       /* Pressure of the previous step for pcoupl  */
+    matrix           svir_prev;       /* Shake virial for previous step for pcoupl */
+    matrix           fvir_prev;       /* Force virial of the previous step for pcoupl  */
+    double          *nosehoover_xi;   /* for Nose-Hoover tcoupl (ngtc)       */
+    double          *nosehoover_vxi;  /* for N-H tcoupl (ngtc)               */
+    double          *nhpres_xi;       /* for Nose-Hoover pcoupl for barostat     */
+    double          *nhpres_vxi;      /* for Nose-Hoover pcoupl for barostat     */
+    double          *therm_integral;  /* for N-H/V-rescale tcoupl (ngtc)     */
+    real             veta;            /* trotter based isotropic P-coupling             */
+    real             vol0;            /* initial volume,required for computing NPT conserverd quantity */
+    int              nalloc;          /* Allocation size for x, v and sd_x when !=NULL*/
+    rvec            *x;               /* the coordinates (natoms)                     */
+    rvec            *v;               /* the velocities (natoms)                      */
+    rvec            *sd_X;            /* random part of the x update for stoch. dyn.  */
+    rvec            *cg_p;            /* p vector for conjugate gradient minimization */
+
+    unsigned int    *ld_rng;          /* RNG random state                           */
+    int             *ld_rngi;         /* RNG index                                  */
+
+    int              nmcrng;          /* number of RNG states                       */
+    unsigned int    *mc_rng;          /* lambda MC RNG random state                 */
+    int             *mc_rngi;         /* lambda MC RNG index                        */
+
+    history_t        hist;            /* Time history for restraints                  */
+
+    ekinstate_t      ekinstate;       /* The state of the kinetic energy data      */
+
+    energyhistory_t  enerhist;        /* Energy history for statistics           */
+    df_history_t     dfhist;          /*Free energy history for free energy analysis  */
+    edsamstate_t     edsamstate;      /* Essential dynamics / flooding history */
+
+    int              ddp_count;       /* The DD partitioning count for this state  */
+    int              ddp_count_cg_gl; /* The DD part. count for index_gl     */
+    int              ncg_gl;          /* The number of local charge groups            */
+    int             *cg_gl;           /* The global cg number of the local cgs        */
+    int              cg_gl_nalloc;    /* Allocation size of cg_gl;              */
+} t_state;
+
+typedef struct
+{
+    double *Qinv;  /* inverse mass of thermostat -- computed from inputs, but a good place to store */
+    double *QPinv; /* inverse mass of thermostat for barostat -- computed from inputs, but a good place to store */
+    double  Winv;  /* Pressure mass inverse -- computed, not input, but a good place to store. Need to make a matrix later */
+    tensor  Winvm; /* inverse pressure mass tensor, computed       */
+} t_extmass;
+
+
+typedef struct
+{
+    real    veta;
+    double  rscale;
+    double  vscale;
+    double  rvscale;
+    double  alpha;
+    double *vscale_nhc;
+} t_vetavars;
+
+!!symtab.h
+
+typedef struct symbuf {
+    int            bufsize;
+    char         **buf;
+    struct symbuf *next;
+} t_symbuf;
+
+typedef struct
+{
+    int       nr;
+    t_symbuf *symbuf;
+} t_symtab;
+
+!!topology.h
+
+#include "atoms.h"
+#include "idef.h"
+#include "block.h"
+#include "simple.h"
+#include "symtab.h"
+
+enum {
+    egcTC,    egcENER,   egcACC, egcFREEZE,
+    egcUser1, egcUser2,  egcVCM, egcXTC,
+    egcORFIT, egcQMMM,
+    egcNR
+};
+
+typedef struct {
+    char          **name;       /* Name of the molecule type            */
+    t_atoms         atoms;      /* The atoms                            */
+    t_ilist         ilist[F_NRE];
+    t_block         cgs;        /* The charge groups                    */
+    t_blocka        excls;      /* The exclusions                       */
+} gmx_moltype_t;
+
+typedef struct {
+    int            type;        /* The molcule type index in mtop.moltype */
+    int            nmol;        /* The number of molecules in this block  */
+    int            natoms_mol;  /* The number of atoms in one molecule    */
+    int            nposres_xA;  /* The number of posres coords for top A  */
+    rvec          *posres_xA;   /* The posres coords for top A            */
+    int            nposres_xB;  /* The number of posres coords for top B  */
+    rvec          *posres_xB;   /* The posres coords for top B            */
+} gmx_molblock_t;
+
+typedef struct {
+    t_grps            grps[egcNR];  /* Groups of things                     */
+    int               ngrpname;     /* Number of groupnames                 */
+    char           ***grpname;      /* Names of the groups                  */
+    int               ngrpnr[egcNR];
+    unsigned char    *grpnr[egcNR]; /* Group numbers or NULL                */
+} gmx_groups_t;
+
+/* This macro gives the group number of group type egc for atom i.
+ * This macro is useful, since the grpnr pointers are NULL
+ * for group types that have all entries 0.
+ */
+#define ggrpnr(groups, egc, i) ((groups)->grpnr[egc] ? (groups)->grpnr[egc][i] : 0)
+
+/* The global, complete system topology struct, based on molecule types.
+   This structure should contain no data that is O(natoms) in memory. */
+typedef struct {
+    char           **name;      /* Name of the topology                 */
+    gmx_ffparams_t   ffparams;
+    int              nmoltype;
+    gmx_moltype_t   *moltype;
+    int              nmolblock;
+    gmx_molblock_t  *molblock;
+    int              natoms;
+    int              maxres_renum; /* Parameter for residue numbering      */
+    int              maxresnr;     /* The maximum residue number in moltype */
+    t_atomtypes      atomtypes;    /* Atomtype properties                  */
+    t_block          mols;         /* The molecules                        */
+    gmx_groups_t     groups;
+    t_symtab         symtab;       /* The symbol table                     */
+} gmx_mtop_t;
+
+/* The mdrun node-local topology struct, completely written out */
+typedef struct {
+    t_idef        idef;         /* The interaction function definition	*/
+    t_atomtypes   atomtypes;    /* Atomtype properties                  */
+    t_block       cgs;          /* The charge groups                    */
+    t_blocka      excls;        /* The exclusions                       */
+} gmx_localtop_t;
+
+/* The old topology struct, completely written out, used in analysis tools */
+typedef struct {
+    char          **name;       /* Name of the topology                 */
+    t_idef          idef;       /* The interaction function definition	*/
+    t_atoms         atoms;      /* The atoms                            */
+    t_atomtypes     atomtypes;  /* Atomtype properties                  */
+    t_block         cgs;        /* The charge groups                    */
+    t_block         mols;       /* The molecules                        */
+    t_blocka        excls;      /* The exclusions                       */
+    t_symtab        symtab;     /* The symbol table                     */
+} t_topology;
+
+!! trx.h
+
+#include "atoms.h"
+
+typedef struct gmxvmdplugin t_gmxvmdplugin;
+
+typedef struct trxframe
+{
+    int      flags;            /* flags for read_first/next_frame  */
+    int      not_ok;           /* integrity flags (see statutil.h  */
+    gmx_bool bDouble;          /* Double precision?                */
+    int      natoms;           /* number of atoms (atoms, x, v, f) */
+    real     t0;               /* time of the first frame, needed  *
+                                * for skipping frames with -dt     */
+    real     tpf;              /* time of the previous frame, not  */
+                               /* the read, but real file frames   */
+    real     tppf;             /* time of two frames ago           */
+                               /* tpf and tppf are needed to       */
+                               /* correct rounding errors for -e   */
+    gmx_bool        bTitle;
+    const char     *title;     /* title of the frame            */
+    gmx_bool        bStep;
+    int             step;      /* MD step number                   */
+    gmx_bool        bTime;
+    real            time;      /* time of the frame                */
+    gmx_bool        bLambda;
+    gmx_bool        bFepState; /* does it contain fep_state?       */
+    real            lambda;    /* free energy perturbation lambda  */
+    int             fep_state; /* which fep state are we in? */
+    gmx_bool        bAtoms;
+    t_atoms        *atoms;     /* atoms struct (natoms)            */
+    gmx_bool        bPrec;
+    real            prec;      /* precision of x, fraction of 1 nm */
+    gmx_bool        bX;
+    rvec           *x;         /* coordinates (natoms)             */
+    gmx_bool        bV;
+    rvec           *v;         /* velocities (natoms)              */
+    gmx_bool        bF;
+    rvec           *f;         /* forces (natoms)                  */
+    gmx_bool        bBox;
+    matrix          box;       /* the 3 box vectors                */
+    gmx_bool        bPBC;
+    int             ePBC;      /* the type of pbc                  */
+    t_gmxvmdplugin* vmdplugin;
+} t_trxframe;
+
+
+
 
 
 
