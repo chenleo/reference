@@ -1,0 +1,32 @@
+Gromacs file to check:
+
+to include
+https://github.com/maverickmw/gromacs/tree/master/src/gromacs/legacyheaders/types
+
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/legacyheaders/types/simple.h
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/legacyheaders/types/forcerec.h
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/legacyheaders/types/atoms.h
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/legacyheaders/types/force_flags.h
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/legacyheaders/nonbonded.h
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/legacyheaders/bondf.h
+
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/legacyheaders/force.h
+
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/mdlib/force.c
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/legacyheaders/nrnb.h
+
+to options:
+
+https://github.com/maverickmw/gromacs/tree/master/src/gromacs/options
+
+https://github.com/maverickmw/gromacs/tree/master/src/gromacs/commandline
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/commandline/cmdlineparser.h
+
+https://github.com/maverickmw/gromacs453pf/blob/master/src/gmxlib/string2.c?source=cc
+
+
+to mpi
+https://github.com/maverickmw/gromacs/blob/master/src/gromacs/gmxlib/thread_mpi/impl.h
+
+to template:
+https://github.com/maverickmw/gromacs/blob/master/share/template/template.cpp
