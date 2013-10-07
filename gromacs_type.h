@@ -18,6 +18,65 @@
 
 typedef int gmx_bool;
 
+#ifndef FALSE
+#  define FALSE   0
+#endif
+#ifndef TRUE
+#  define TRUE    1
+#endif
+#define BOOL_NR 2
+
+
+typedef int         atom_id;      /* To indicate an atoms id         */
+#define NO_ATID     (atom_id)(~0) /* Use this to indicate invalid atid */
+
+/*! \brief Double precision accuracy */
+#define GMX_DOUBLE_EPS   1.11022302E-16
+
+/*! \brief Maximum double precision value - reduced 1 unit in last digit for MSVC */
+#define GMX_DOUBLE_MAX   1.79769312E+308
+
+/*! \brief Minimum double precision value */
+#define GMX_DOUBLE_MIN   2.22507386E-308
+
+/*! \brief Single precision accuracy */
+#define GMX_FLOAT_EPS    5.96046448E-08
+
+/*! \brief Maximum single precision value - reduced 1 unit in last digit for MSVC */
+#define GMX_FLOAT_MAX    3.40282346E+38
+
+/*! \brief Minimum single precision value */
+#define GMX_FLOAT_MIN    1.17549435E-38
+
+
+/* Check whether we already have a real type! */
+#ifdef GMX_DOUBLE
+
+#ifndef HAVE_REAL
+typedef double      real;
+#define HAVE_REAL
+#endif
+
+#define GMX_MPI_REAL    MPI_DOUBLE
+#define GMX_REAL_EPS    GMX_DOUBLE_EPS
+#define GMX_REAL_MIN    GMX_DOUBLE_MIN
+#define GMX_REAL_MAX    GMX_DOUBLE_MAX
+#define gmx_real_fullprecision_pfmt "%21.14e"
+#else
+
+#ifndef HAVE_REAL
+typedef float           real;
+#define HAVE_REAL
+#endif
+
+#define GMX_MPI_REAL    MPI_FLOAT
+#define GMX_REAL_EPS    GMX_FLOAT_EPS
+#define GMX_REAL_MIN    GMX_FLOAT_MIN
+#define GMX_REAL_MAX    GMX_FLOAT_MAX
+#define gmx_real_fullprecision_pfmt "%14.7e"
+#endif
+typedef int gmx_bool;
+
 typedef int         atom_id;      /* To indicate an atoms id         */
 #define NO_ATID     (atom_id)(~0) /* Use this to indicate invalid atid */
 
